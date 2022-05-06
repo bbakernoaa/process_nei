@@ -1,0 +1,5 @@
+name: process_nei
+channels:
+  - conda-forge
+  - defaults
+prefix: /groups/ESS/bbaker25/mambaforge/envs/process_nei
