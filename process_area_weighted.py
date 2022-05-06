@@ -134,7 +134,7 @@ def process(infile,outfile,target_file,weight_file,convert=False):
     if os.path.exists(outfile.replace('nc','nc4')):
         print('Intermediate file exists..... opening')
         out = xr.open_dataset(outfile.replace('nc','nc4'),decode_times=False,decode_cf=False)
-        c = mio.cmaq.open_dataset(infile)
+        cmaq = mio.cmaq.open_dataset(infile)
     else:
         # open cmaq file
         print('Opening CMAQ file:', infile)
