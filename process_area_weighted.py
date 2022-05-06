@@ -152,7 +152,7 @@ def process(infile,outfile,target_file,weight_file,convert=False):
         for v in c.data_vars:
             if v != 'area':
                 attrs = c[v].attrs
-                c[v] = (c[v] / c.area).astype('float32')
+                c[v] = (c[v] / c.area.data).astype('float32')
                 c[v].attrs = attrs
     # check if target file exists
         print('Getting target')
@@ -239,11 +239,11 @@ def process(infile,outfile,target_file,weight_file,convert=False):
                 n = float((out[v].isel(time=0) * out.area.data * 1000).sum())
             else:
                 n = float((out[v].isel(time=0) * out.area.data / mw[v] * 1000).sum())
-            o = float(c[v].isel(time=0).sum().item(0))
+            o = float(cmaq[v].isel(time=0).sum().item(0))
             print(' {}          {:.5f}          {:.5f}'.format(v,n,o))
 
     # remove intermediate file
-    # os.remove(outfile.replace('nc','nc4'))
+    os.remove(outfile.replace('nc','nc4'))
 
 if __name__ == '__main__':
     parser = ArgumentParser(description='Regrid CMAQ IOAPI to WSG84 grid', formatter_class=ArgumentDefaultsHelpFormatter)
