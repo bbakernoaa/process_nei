@@ -213,7 +213,7 @@ def process(infile,outfile,target_file,weight_file,convert=False):
                 else:
                    if v in mw:
           #             print(out[v])
-                       if v is not 'NOx' or v is not 'NOy':
+                       if (v != 'NOx') | (v != 'NOy'):
                            out[v].data[:] = out[v].data
                        else:
                            out[v].attrs['units'] = convert_units(out[v])
