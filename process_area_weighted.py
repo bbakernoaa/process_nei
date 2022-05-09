@@ -206,25 +206,18 @@ def process(infile,outfile,target_file,weight_file,convert=False):
         if 'units' in out[v].attrs:
             if (out[v].attrs['units'].strip() == 'g/s') | (out[v].attrs['units'].strip() == 'moles/s'):
                 if out[v].attrs['units'].strip() == 'g/s':
-                    out[v].attrs['units'] = convert_units(out[v])
+                    out[v].attrs['units'] = 'kg m-2 s-1' # convert_units(out[v])
                     out[v].data[:] = out[v].data / 1000.
-         #           print(out[v])
-                    #out[v] = convert_units(out[v])
+                    print('Convert {} from "g/s" to "kg m-2 s-1"'.format(v))
                 else:
-                   if v in mw:
-          #             print(out[v])
-                       if (v != 'NOx') | (v != 'NOy'):
-                           out[v].data[:] = out[v].data
-                       else:
-                           out[v].attrs['units'] = convert_units(out[v])
-           #            print(out[v])
-                           scale_factor = mw[v] / 1000. # convert g/mol to kg/mol 
-                           out[v].data[:] = out[v].data * mw[v] / 1000.
-            #           print(out[v])
-                       #out[v] = convert_units(out[v])
-                   else:
-                       print(' Check For {}'.format(v))
-                       out[v].attrs['units'] = convert_units(out[v])
+                    if v in mw:
+                        print('{} in species_weights.txt'.format(v))
+                        out[v].attrs['units'] = 'kg m-2 s-1'
+                        out[v].data[:] = out[v].data * mw[v] / 1000.
+                        print('Convert {} from "moles/s" to "kg m-2 s-1"'.format(v))
+                    else:
+                        print(' Check For {}'.format(v))
+                        out[v].attrs['units'] = convert_units(out[v])
         #print(v,out[v].attrs)
 
     
