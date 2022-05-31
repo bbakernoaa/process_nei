@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import xarray as xr
-import monet
 import xesmf as xe
 import monetio as mio
 import pyproj
@@ -67,14 +66,6 @@ def regrid_dataset(regrid_obj,source):
     return regrid_obj(source)
 
 def convert_units(da,scale_factor=None):
-    #if scale_factor is not None:
-    #    if scale_factor == 1000.: # assume conversion from g -> kg
-    #        outda = da / 1000.
-    #    else:
-    #        outda = da * scale_factor
-    #else:
-    #    outda = da
-
     if 'g/s' in da.attrs['units']:
         return da.attrs['units'].replace('g/s','kg m-2 s-1')
     if 'moles/s' in da.attrs['units']:
@@ -248,6 +239,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     infile = args.infile
+    # Check if input file exists
     outfile = args.outfile
     if args.target_file is not None:       
         target = args.target_file
@@ -257,5 +249,10 @@ if __name__ == '__main__':
         weights = args.weight_file
     else:
         weights= 'weights.nc'
-        
-    process(infile,outfile,target,weights)
+    if os.path.exists(infile):
+        if os.path.exists(outfile):
+            print('file, {}, already exists... skipping'.format(outfile))
+        else:
+            process(infile,outfile,target,weights)
+    else:
+        print('input file, {} does not exits. Exiting'.format(infile))
