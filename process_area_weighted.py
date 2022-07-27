@@ -122,6 +122,7 @@ def write_ncf(dset,outfile):
     dset.load().to_netcdf(outfile, encoding=encoding)
 
 def process(infile,outfile,target_file,weight_file,convert=False):
+    # first check if something is wrong with the time slice in the output file if exists
     if os.path.exists(outfile.replace('nc','nc4')):
         print('Intermediate file exists..... opening')
         out = xr.open_dataset(outfile.replace('nc','nc4'),decode_times=False,decode_cf=False)
@@ -149,6 +150,7 @@ def process(infile,outfile,target_file,weight_file,convert=False):
         print('Getting target')
         if os.path.isfile(target_file):
             t = xr.open_dataset(target_file)
+            
         else:   
             # create boundary from minimum and maximum latitudes of the cmaq file
             t = create_target_latlon_grid(c)
@@ -213,16 +215,23 @@ def process(infile,outfile,target_file,weight_file,convert=False):
 
     
     # output final file : outfile
-    write_ncf(out,outfile)
+    write_ncf(out.isel(time=slice(0,24)),outfile)
 
     print(' Variable        Remapped (mol/s)         Orig (mol/s)')
+    if 'area' not in out.data_vars:
+        print('AREA NOT IN ----->', outfile, 'Adding')
+        t = xr.open_dataset(target_file)
+        out['area'] = t.area
     for v in out.data_vars:
         if v != 'area':
             #print(out[v])
             if v not in mw: 
                 n = float((out[v].isel(time=0) * out.area.data * 1000).sum())
             else:
-                n = float((out[v].isel(time=0) * out.area.data / mw[v] * 1000).sum())
+                try:
+                    n = float((out[v].isel(time=0) * out.area.data / mw[v] * 1000).sum())
+                except AttributeError:
+                    print('AREA NOT IN -> ',outfile)
             o = float(cmaq[v].isel(time=0).sum().item(0))
             print(' {}          {:.5f}          {:.5f}'.format(v,n,o))
 
@@ -251,7 +260,19 @@ if __name__ == '__main__':
         weights= 'weights.nc'
     if os.path.exists(infile):
         if os.path.exists(outfile):
-            print('file, {}, already exists... skipping'.format(outfile))
+            f = xr.open_dataset(outfile)
+            if len(f.time) == 25:
+                print('fixing time:',outfile)
+                os.remove(outfile)
+                f = f.isel(time=slice(0,24))
+                write_ncf(f,outfile)
+
+            elif 'area' in f.data_vars:
+                print('file, {}, already exists... skipping'.format(outfile))
+            else:
+                os.remove(outfile)
+                process(infile,outfile,target,weights)
+            f.close()
         else:
             process(infile,outfile,target,weights)
     else:
