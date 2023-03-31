@@ -7,21 +7,36 @@ from pyproj import Geod
 from numpy import zeros, arange, ones
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
+import numba
 import PseudoNetCDF as pnc
 import warnings
 warnings.filterwarnings('ignore')
 
 def open_cmaq_file(fname):
-#    cmaqf = mio.cmaq.open_dataset('/groups/ESS/pcampbe8/emissions/IC2016V1_EMIS_PREMERGED_2016fh_GRID/rwc/emis_mole_rwc_20160105_12us1_cmaq_cb6_2016fh_16j.ncf')
-    cmaqf = mio.cmaq.open_dataset(fname)
-    v = pnc.pncopen(fname,format='ioapi')
-    for y in range(cmaqf.dims['y']):
-        for x in range(cmaqf.dims['x']):
-            cmaqf.longitude[y,x],cmaqf.latitude[y,x] = v.ij2ll(x,y)
-    return cmaqf
+    print('open with pnc')
+    cmaqf = xr.open_dataset(fname,engine='pseudonetcdf',backend_kwargs=dict(format='ioapi', addcf=True),decode_cf=False,decode_times=False).set_coords(["latitude", "longitude", "time"]).rename({"COL": "x", "ROW": "y"}).squeeze().drop(["TFLAG",'layer','level','time_bounds'])
+    cmaqf.coords["TSTEP"] = cmaqf.time
+    cmaqf = cmaqf.drop(["time"]).rename({"TSTEP": "time"})
+    print('getting corners')
+    lon_b,lat_b = get_corners(cmaqf)
+    cmaqf =  condition_cmaq_dset(cmaqf,lat_b,lon_b)
+    print('returning dataset')
+    return cmaqf.drop(['lambert_conformal_conic','latitude_bounds','longitude_bounds'])
 
-def get_proj4_corners(dset, projstr):
-    p = pyproj.Proj(dset.proj4_srs)
+def get_corners(dset):
+    lon_b = zeros((dset.dims['y']+1,dset.dims['x']+1))
+    lat_b = zeros((dset.dims['y']+1,dset.dims['x']+1))
+    proj4_srs = "+proj=lcc +lat_1={} +lat_2={} +lat_0={} +lon_0{} +x_0={} +y_0={} +datum=WGS84 +units=m +a={} +b={}".format(
+        dset.lambert_conformal_conic.attrs["latitude_of_projection_origin"],
+        dset.lambert_conformal_conic.attrs["latitude_of_projection_origin"],
+        dset.lambert_conformal_conic.attrs["latitude_of_projection_origin"],
+        dset.lambert_conformal_conic.attrs["longitude_of_central_meridian"],
+        dset.lambert_conformal_conic.attrs["false_easting"],
+        dset.lambert_conformal_conic.attrs["false_northing"],
+        dset.lambert_conformal_conic.attrs["semi_major_axis"],
+        dset.lambert_conformal_conic.attrs["semi_minor_axis"]
+        )
+    p = pyproj.Proj(proj4_srs)
     lon_b,lat_b = zeros((dset.dims['y']+1,dset.dims['x']+1)), zeros((dset.dims['y']+1,dset.dims['x']+1))
     xx,yy = p(dset.longitude.values,dset.latitude.values)
     lon_b_upper,lat_b_upper = p(xx+dset.XCELL / 2., yy+dset.YCELL /2.,inverse=True)
@@ -34,13 +49,27 @@ def get_proj4_corners(dset, projstr):
     lon_b[-1,0],lat_b[-1,0] = p(xx[-1,0]-dset.XCELL/2.,yy[-1,0] + dset.YCELL/2.,inverse=True)
     return lon_b,lat_b
 
+def get_proj4_corners(dset, projstr):
+     p = pyproj.Proj(dset.proj4_srs)
+     lon_b,lat_b = zeros((dset.dims['y']+1,dset.dims['x']+1)), zeros((dset.dims['y']+1,dset.dims['x']+1))
+     xx,yy = p(dset.longitude.values,dset.latitude.values)
+     lon_b_upper,lat_b_upper = p(xx+dset.XCELL / 2., yy+dset.YCELL /2.,inverse=True)
+     lon_b_lower,lat_b_lower = p(xx - dset.XCELL/2, yy-dset.YCELL /2.,inverse=True)
+     lon_b[1:,1:], lat_b[1:,1:] = lon_b_upper,lat_b_upper
+     lon_b[:-1,:-1],lat_b[:-1,:-1] = lon_b_lower,lat_b_lower
+     # the upper left corner and lower right corner didn't get filled here
+     # so fill them manually
+     lon_b[0,-1],lat_b[0,-1] = p(xx[0,-1]+dset.XCELL/2.,yy[0,-1] - dset.YCELL/2.,inverse=True)
+     lon_b[-1,0],lat_b[-1,0] = p(xx[-1,0]-dset.XCELL/2.,yy[-1,0] + dset.YCELL/2.,inverse=True)
+     return lon_b,lat_b
+
 def condition_cmaq_dset(dset,lat_b,lon_b):
     dset['lat_b'] = (('y_b','x_b'),lat_b)
     dset['lon_b'] = (('y_b','x_b'),lon_b)
     return dset.set_coords(['lat_b','lon_b']).rename({'latitude':'lat','longitude':'lon'})
 
-def create_target_latlon_grid(dset):
-    target = xe.util.grid_2d(dset.lon.min()-.05,dset.lon.max()+.05,.125,dset.lat.min()-0.05,dset.lat.max()+0.05,.125)
+def create_target_latlon_grid(dset,res):
+    target = xe.util.grid_2d(dset.lon.min()-.05,dset.lon.max()+.05,res,dset.lat.min()-0.05,dset.lat.max()+0.05,res)
     return target
 
 def get_target_area(dset):
@@ -121,7 +150,7 @@ def write_ncf(dset,outfile):
         encoding[v] = dict(zlib=True, complevel=4)
     dset.load().to_netcdf(outfile, encoding=encoding)
 
-def process(infile,outfile,target_file,weight_file,convert=False):
+def process(infile,outfile,target_file,weight_file,convert=False, area=None, verify=True, target_res=0.125):
     # first check if something is wrong with the time slice in the output file if exists
     if os.path.exists(outfile.replace('nc','nc4')):
         print('Intermediate file exists..... opening')
@@ -130,46 +159,46 @@ def process(infile,outfile,target_file,weight_file,convert=False):
     else:
         # open cmaq file
         print('Opening CMAQ file:', infile)
-        cmaq = open_cmaq_file(infile)
-#    cmaq = cmaq[['CO','TFLAG']]
-    # get cmaq lat_b and lon_b
-        print('Calculating CMAQ corner latitude and longitude')
-        lon_b, lat_b = get_proj4_corners(cmaq,cmaq.proj4_srs)
-    
-    # get cmaq file ready for conservative regridding using xesmf
-        print('Preconditioning for regridding')
-        c = condition_cmaq_dset(cmaq,lat_b,lon_b)
-    # create area weighted cmaq file (units/m2/second)
-        c = get_target_area(c).drop('TFLAG')
+        c = open_cmaq_file(infile)
+        orig = c.copy()
+        # create area weighted cmaq file (units/m2/second)
+        print('Getting Area')
+        if area is None:
+            print('Area not found.... generating')
+            c = get_target_area(c)
+        else:
+            c['area'] = area['area']
+        print('creating area weighted variables')
         for v in c.data_vars:
             if v != 'area':
+                print('          ',v)
                 attrs = c[v].attrs
                 c[v] = (c[v] / c.area.data).astype('float32')
                 c[v].attrs = attrs
-    # check if target file exists
+        # check if target file exists
         print('Getting target')
         if os.path.isfile(target_file):
             t = xr.open_dataset(target_file)
-            
-        else:   
+
+        else:
             # create boundary from minimum and maximum latitudes of the cmaq file
-            t = create_target_latlon_grid(c)
-        
+            t = create_target_latlon_grid(c, target_res)
+
             # calculate the area using the boundaries and pyproj (WSG84)
             print('Getting target area')
             t = get_target_area(t)
 
             #save target file for later use
             t.to_netcdf(target_file)
-    
+
         # regrid object
         print('Creating Regridder Object')
         if weight_file is not None and os.path.isfile(weight_file):
-            r = create_regridder(cmaq,t,method='conservative_normed',weights=weight_file)
+            r = create_regridder(c,t,method='conservative_normed',weights=weight_file)
         else:
-            r = create_regridder(cmaq,t,method='conservative_normed')
+            r = create_regridder(c,t,method='conservative_normed')
             r.to_netcdf()
-        
+
         print('Regrid CMAQ file to target')
         out = regrid_dataset(r, c)
         out['area'] = t.area
@@ -178,14 +207,15 @@ def process(infile,outfile,target_file,weight_file,convert=False):
         for v in c.data_vars:
             out[v].attrs = c[v].attrs
 
-        out.attrs['Convention'] = 'COARDS'
-        out.attrs['Format'] = 'NetCDF-4'
-        out = convert_to_COARDS_time(out)
-        out = convert_to_COARDS_latlon(out)
-        out = convert_to_COARDS_lev(out)
-        out = convert_to_COARDS_area(out)
+#        out.attrs['Convention'] = 'COARDS'
+#        out.attrs['Format'] = 'NetCDF-4'
+#        out = convert_to_COARDS_time(out)
+#        out = convert_to_COARDS_latlon(out)
+#        out = convert_to_COARDS_lev(out)
+#        out = convert_to_COARDS_area(out)
         out = out.drop(['lat_b','lon_b'])
-   
+
+        
         write_ncf(out,outfile.replace('nc','nc4'))
         # if convert divide by target area and change units attr for each variable
 
@@ -213,29 +243,34 @@ def process(infile,outfile,target_file,weight_file,convert=False):
                         out[v].attrs['units'] = convert_units(out[v])
         #print(v,out[v].attrs)
 
-    
+
     # output final file : outfile
     write_ncf(out.isel(time=slice(0,24)),outfile)
 
-    print(' Variable        Remapped (mol/s)         Orig (mol/s)')
-    if 'area' not in out.data_vars:
-        print('AREA NOT IN ----->', outfile, 'Adding')
-        t = xr.open_dataset(target_file)
-        out['area'] = t.area
-    for v in out.data_vars:
-        if v != 'area':
-            #print(out[v])
-            if v not in mw: 
-                n = float((out[v].isel(time=0) * out.area.data * 1000).sum())
-            else:
-                try:
-                    n = float((out[v].isel(time=0) * out.area.data / mw[v] * 1000).sum())
-                except AttributeError:
-                    print('AREA NOT IN -> ',outfile)
-            o = float(cmaq[v].isel(time=0).sum().item(0))
-            print(' {}          {:.5f}          {:.5f}'.format(v,n,o))
-
-    # remove intermediate file
+    if verify:
+        print(' Variable    Remapped (mol/s | g/s)   Orig (mol/s | g/s)')
+        if 'area' not in out.data_vars:
+            print('AREA NOT IN ----->', outfile, 'Adding')
+            t = xr.open_dataset(target_file)
+            out['area'] = t.area
+        for v in out.data_vars:
+            if (v != 'area') & (v != 'lat') & (v != 'lon') & (v != 'time'):
+                # print(v)
+                if v not in mw:
+                    n = float((out[v].isel(time=0) * out.area.data * 1000).sum())
+                else:
+                    try:
+                        #print(v, orig[v].attrs)
+                        if orig[v].attrs['units'].strip() == 'mol/s':
+                            n = float((out[v].isel(time=0) * out.area.data / mw[v] * 1000).sum())
+                        else:
+                            n = float((out[v].isel(time=0) * out.area.data * 1000).sum())
+                    except AttributeError:
+                        print('AREA NOT IN -> ',outfile)
+                o = float(orig[v].isel(time=0).sum().item(0))
+                print(' {}          {:.5f}          {:.5f}'.format(v,n,o))
+                        
+                        # remove intermediate file
     os.remove(outfile.replace('nc','nc4'))
 
 if __name__ == '__main__':
@@ -243,14 +278,17 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--infile', help='input ioapi file name', type=str, required=True)
     parser.add_argument('-o', '--outfile', help='output file', default='./', type=str,required=False)
     parser.add_argument('-t', '--target_file', help='predefined target domain file', type=str, required=False)
+    parser.add_argument('-tr', '--target_resolution', help='predefined target domain file', type=float, default=None, required=False)
     parser.add_argument('-w', '--weight_file', help='filename of precomputed weight file', type=str, required=False)
     parser.add_argument('-c', '--change_units', help='change units to m-2 s-1 and divide by target area',required=False)
+    parser.add_argument('-s', '--source_area', help='source area file',required=False,type=str,default=None)
+    parser.add_argument('-v', '--verify', help='verify',required=False,type=bool, default=True)
     args = parser.parse_args()
-    
+
     infile = args.infile
     # Check if input file exists
     outfile = args.outfile
-    if args.target_file is not None:       
+    if args.target_file is not None:
         target = args.target_file
     else:
         target = 'target.nc'
@@ -258,6 +296,16 @@ if __name__ == '__main__':
         weights = args.weight_file
     else:
         weights= 'weights.nc'
+    #    print(args.source_area)
+    if args.source_area is not None:
+        area = xr.open_dataset(args.source_area)
+    else:
+        area = None
+    if args.target_resolution is not None:
+        res = args.target_resolution
+    else:
+        res = 0.125
+    #    print(area)
     if os.path.exists(infile):
         if os.path.exists(outfile):
             f = xr.open_dataset(outfile)
@@ -271,9 +319,12 @@ if __name__ == '__main__':
                 print('file, {}, already exists... skipping'.format(outfile))
             else:
                 os.remove(outfile)
-                process(infile,outfile,target,weights)
+                process(infile,outfile,target,weights,area=area,verify=args.verify, target_res=res)
             f.close()
         else:
-            process(infile,outfile,target,weights)
+            process(infile,outfile,target,weights,area=area,verify=args.verify, target_res=res)
+        print('===============================================')
+        print('--------------------SUCCESS--------------------')
+        print('===============================================')
     else:
         print('input file, {} does not exits. Exiting'.format(infile))
