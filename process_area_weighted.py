@@ -148,6 +148,11 @@ def write_ncf(dset,outfile):
     encoding = {}
     for v in dset.data_vars:
         encoding[v] = dict(zlib=True, complevel=4)
+    encoding["lat"] = dict(zlib=True, complevel=4)
+    encoding["lon"] = dict(zlib=True, complevel=4)
+    if 'lat_b' in dset:
+        encoding["lat_b"] = dict(zlib=True, complevel=4)
+        encoding["lon_b"] = dict(zlib=True, complevel=4)
     dset.load().to_netcdf(outfile, encoding=encoding)
 
 def process(infile,outfile,target_file,weight_file,convert=False, area=None, verify=True, target_res=0.125):
@@ -189,7 +194,7 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
             t = get_target_area(t)
 
             #save target file for later use
-            t.to_netcdf(target_file)
+            write_ncf(target_file)
 
         # regrid object
         print('Creating Regridder Object')
@@ -197,7 +202,7 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
             r = create_regridder(c,t,method='conservative_normed',weights=weight_file)
         else:
             r = create_regridder(c,t,method='conservative_normed')
-            r.to_netcdf()
+            R.to_netcdf()
 
         print('Regrid CMAQ file to target')
         out = regrid_dataset(r, c)
