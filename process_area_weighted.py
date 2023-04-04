@@ -202,7 +202,7 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
             r = create_regridder(c,t,method='conservative_normed',weights=weight_file)
         else:
             r = create_regridder(c,t,method='conservative_normed')
-            R.to_netcdf()
+            r.to_netcdf()
 
         print('Regrid CMAQ file to target')
         out = regrid_dataset(r, c)
