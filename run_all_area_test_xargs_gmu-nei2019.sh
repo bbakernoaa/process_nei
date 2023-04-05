@@ -13,7 +13,7 @@ targetgrid=317x735
 #targetres=0.01_degree
 #targetgrid=3162x7342
 
-outdir=GMU-NEI2019v1_${targetres}/v2023-03/
+outdir=GMU-NEI2019v1/v2023-03/
 mkdir -p $outdir
 
 #May need run once first to generate target and weight files if they don't exist
@@ -45,7 +45,9 @@ mkdir -p ${outdir}/${month}/
 
 	for day in "01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31"; do
         echo ${day}
-        done | xargs -I {} --max-procs 15 ./process_area_weighted.py -f "${indir}/${emiprefix}_2019${month}{}_${emisuffix}" -o "${outdir}/${month}/NEI2019v1_0.1x0.1_2019${month}{}_${sector}.nc" -t "target_${targetres}.nc" -s "${sourceres}_area.nc"  -w "conservative_normed_${sourcegrid}_${targetgrid}.nc" 
+        done | xargs -I {} --max-procs 1 ./process_area_weighted.py -f "${indir}/${emiprefix}_2019${month}{}_${emisuffix}" -o "${outdir}/${month}/NEI2019v1_${targetres}_2019${month}{}_${sector}.nc" -t "target_${targetres}.nc" -s "${sourceres}_area.nc"  -w "conservative_normed_${sourcegrid}_${targetgrid}.nc" 
+#        ./process_area_weighted.py -f "${indir}/${emiprefix}_2019${month}${day}_${emisuffix}" -o "${outdir}/${month}/NEI2019v1_${targetres}_2019${month}${day}_${sector}.nc" -t "target_${targetres}.nc" -s "${sourceres}_area.nc"  -w "conservative_normed_${sourcegrid}_${targetgrid}.nc"
+#        done
 
 done
 
