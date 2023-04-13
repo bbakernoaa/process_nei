@@ -4,11 +4,11 @@
 sourceres=GMU_NEMO_1km
 sourcegrid=3177x5397
 #0.1 degree
-targetres=0.1_degree
-targetgrid=317x735
+#targetres=0.1_degree
+#targetgrid=317x735
 #0.03 degree
-#targetres=0.03_degree
-#targetgrid=1054x2448
+targetres=0.03_degree
+targetgrid=1054x2448
 #0.01 degree
 #targetres=0.01_degree
 #targetgrid=3162x7342
@@ -21,7 +21,8 @@ mkdir -p $outdir
 
 declare -a sectors=("all")
 
-declare -a months=("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12")
+declare -a months=("01" "02" "03" "04" "05") # "06" "07" "08" "09" "10" "11" "12")
+
 
 for sector in "${sectors[@]}"
 do
@@ -37,7 +38,7 @@ mkdir -p ${outdir}/${month}/
 
 	for day in "01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31"; do
         echo ${day}
-        done | xargs -I {} --max-procs 10 ./process_area_weighted.py -f "${indir}/${emiprefix}_2019${month}{}_${emisuffix}" -o "${outdir}/${month}/NEI2019v1_${targetres}_2019${month}{}_${sector}.nc" -t "target_${targetres}.nc" -s "${sourceres}_area.nc"  -w "conservative_normed_${sourcegrid}_${targetgrid}.nc" 
+        done | xargs -I {} --max-procs 1 ./process_area_weighted.py -f "${indir}/${emiprefix}_2019${month}{}_${emisuffix}" -o "${outdir}/${month}/NEI2019v1_${targetres}_2019${month}{}_${sector}.nc" -t "target_${targetres}.nc" -s "${sourceres}_area.nc"  -w "conservative_normed_${sourcegrid}_${targetgrid}.nc" 
 #        ./process_area_weighted.py -f "${indir}/${emiprefix}_2019${month}${day}_${emisuffix}" -o "${outdir}/${month}/NEI2019v1_${targetres}_2019${month}${day}_${sector}.nc" -t "target_${targetres}.nc" -s "${sourceres}_area.nc"  -w "conservative_normed_${sourcegrid}_${targetgrid}.nc"
 #        done
 
