@@ -246,8 +246,16 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
                     else:
                         print(' Check For {}'.format(v))
                         out[v].attrs['units'] = convert_units(out[v])
+                # strip blank spaces from long_name and var_desc
+                out[v].attrs['long_name'] = out[v].attrs['long_name'].strip()
+                out[v].attrs['var_desc'] = out[v].attrs['var_desc'].strip()
         #print(v,out[v].attrs)
-
+    # ensure units on latitude longitude and area
+    out['lat'].attrs['units'] = 'degrees_north'
+    out['lon'].attrs['units'] = 'degrees_east'
+    out['area'].attrs['units'] = 'm**2'
+    out['time'].attrs['units'] = 'seconds since 1970-01-01 00:00:00+0000'
+    out['time'].attrs['long_name'] = 'time'
 
     # output final file : outfile
     write_ncf(out.isel(time=slice(0,24)),outfile)
