@@ -7,6 +7,8 @@ from pyproj import Geod
 from numpy import zeros, arange, ones
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
+import pandas as pd
+import numpy as np
 import numba
 import PseudoNetCDF as pnc
 import warnings
@@ -173,13 +175,13 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
             c = get_target_area(c)
         else:
             c['area'] = area['area']
-        print('creating area weighted variables')
+        #print('creating area weighted variables')
         for v in c.data_vars:
-            if v != 'area':
-                print('          ',v)
-                attrs = c[v].attrs
-                c[v] = (c[v] / c.area.data).astype('float32')
-                c[v].attrs = attrs
+           if v != 'area':
+               print('          ',v)
+               attrs = c[v].attrs
+               c[v] = (c[v] / c.area.data).astype('float32')
+               c[v].attrs = attrs
         # check if target file exists
         print('Getting target')
         if os.path.isfile(target_file):
@@ -199,6 +201,7 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
         # regrid object
         print('Creating Regridder Object')
         if weight_file is not None and os.path.isfile(weight_file):
+            print('.....creating using weight file', weight_file)
             r = create_regridder(c,t,method='conservative_normed',weights=weight_file)
         else:
             r = create_regridder(c,t,method='conservative_normed')
@@ -211,6 +214,9 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
         # add netcdf attributes back in
         for v in c.data_vars:
             out[v].attrs = c[v].attrs
+            # convert to area weighted
+#            if v != 'area':
+#                out[v].data = (out[v].data/out['area'].data).astype('float32')
 
 #        out.attrs['Convention'] = 'COARDS'
 #        out.attrs['Format'] = 'NetCDF-4'
@@ -251,11 +257,26 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
                 out[v].attrs['var_desc'] = out[v].attrs['var_desc'].strip()
         #print(v,out[v].attrs)
     # ensure units on latitude longitude and area
-    out['lat'].attrs['units'] = 'degrees_north'
-    out['lon'].attrs['units'] = 'degrees_east'
+    #    write_ncf(out,'thisisatest.nc')
+    out['x'] = out.lon[0,:].astype('float32')
+    out['y'] = out.lat[:,0].astype('float32')
+    out['x'].attrs['units'] = 'degrees_east'
+    out['y'].attrs['units'] = 'degrees_north'
+    out['x'].attrs['long_name'] = 'longitude'
+    out['y'].attrs['long_name'] = 'latitude'
+    out = out.drop(['lat','lon'])
+    out = out.rename({'y':'lat','x':'lon'})
     out['area'].attrs['units'] = 'm**2'
-    out['time'].attrs['units'] = 'seconds since 1970-01-01 00:00:00+0000'
+    out['area'].attrs['long_name'] = 'area'
+    current_date = (pd.to_timedelta(out.time.values,unit='seconds') + pd.Timestamp('1970-01-01'))[0].strftime('hours since %Y-%m-%d 00:00:00')
+    out['time'] = np.arange(0,25)
+    out['time'].attrs['units'] = current_date
     out['time'].attrs['long_name'] = 'time'
+    out['time'].attrs['calendar'] = 'standard'
+    out.attrs['conventions'] = 'COARDS'
+    out.attrs['history'] = 'processed using process_nei'
+    out.attrs['title'] = 'GMU NEMO Emissions'
+#    out = out.drop(['lat','lon'])
 
     # output final file : outfile
     write_ncf(out.isel(time=slice(0,24)),outfile)
