@@ -176,12 +176,12 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
         else:
             c['area'] = area['area']
         #print('creating area weighted variables')
-       for v in c.data_vars:
-          if v != 'area':
-              print('          ',v)
-              attrs = c[v].attrs
-              c[v] = (c[v] / c.area.data).astype('float32')
-               c[v].attrs = attrs
+        for v in c.data_vars:
+            if v != 'area':
+                print('          ',v)
+                attrs = c[v].attrs
+                c[v] = (c[v] / c.area.data).astype('float32')
+                c[v].attrs = attrs
         # check if target file exists
         print('Getting target')
         if os.path.isfile(target_file):
