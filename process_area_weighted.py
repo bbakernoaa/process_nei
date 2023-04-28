@@ -176,11 +176,11 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
         else:
             c['area'] = area['area']
         #print('creating area weighted variables')
-        for v in c.data_vars:
-           if v != 'area':
-               print('          ',v)
-               attrs = c[v].attrs
-               c[v] = (c[v] / c.area.data).astype('float32')
+       for v in c.data_vars:
+          if v != 'area':
+              print('          ',v)
+              attrs = c[v].attrs
+              c[v] = (c[v] / c.area.data).astype('float32')
                c[v].attrs = attrs
         # check if target file exists
         print('Getting target')
@@ -276,6 +276,7 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
     out.attrs['conventions'] = 'COARDS'
     out.attrs['history'] = 'processed using process_nei'
     out.attrs['title'] = 'GMU NEMO Emissions'
+    out = out.reindex(lat=np.sort(out.lat.values)[::-1])
 #    out = out.drop(['lat','lon'])
 
     # output final file : outfile
