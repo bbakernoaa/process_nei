@@ -241,13 +241,13 @@ def process(infile,outfile,target_file,weight_file,convert=False, area=None, ver
             if (out[v].attrs['units'].strip() == 'g/s') | (out[v].attrs['units'].strip() == 'moles/s'):
                 if out[v].attrs['units'].strip() == 'g/s':
                     out[v].attrs['units'] = 'kg m-2 s-1' # convert_units(out[v])
-                    out[v].data[:] = out[v].data / 1000.
+                    out[v].data[:] = out[v].data.astype('float32') / 1000.
                     print('Convert {} from "g/s" to "kg m-2 s-1"'.format(v))
                 else:
                     if v in mw:
                         print('{} in species_weights.txt'.format(v))
                         out[v].attrs['units'] = 'kg m-2 s-1'
-                        out[v].data[:] = out[v].data * mw[v] / 1000.
+                        out[v].data[:] = out[v].data.astype('float32') * mw[v] / 1000.
                         print('Convert {} from "moles/s" to "kg m-2 s-1"'.format(v))
                     else:
                         print(' Check For {}'.format(v))
